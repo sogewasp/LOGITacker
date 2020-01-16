@@ -29,244 +29,237 @@ NRF_LOG_MODULE_REGISTER();
 // all USB HID reports arrive at the target. THIS ONLY HOLDS TRUE FOR UNIFYING RECEIVERS, for G-Series receivers
 // or Unifying receivers with a G-Series firmware, even with 1ms tx_delay, no USB HID input reports are lost.
 
-#define INJECT_TX_DELAY_MS_UNIFYING_FAST 1
-#define INJECT_TX_DELAY_MS_UNIFYING 8
-#define INJECT_TX_DELAY_MS_LIGHTSPEED 1
-#define INJECT_RETRANSMIT_BEFORE_FAIL 10
+#define INJECT_TX_DELAY_MS_UNIFYING_FAST	1
+#define INJECT_TX_DELAY_MS_UNIFYING			8
+#define INJECT_TX_DELAY_MS_LIGHTSPEED		1
+#define INJECT_RETRANSMIT_BEFORE_FAIL		10
 
-// ToDo: change to initialized -> idle -> working -> idle -> not_initialized (SUCCESS/FAIL states aren't needed, proper events could be fired while processing)
-typedef enum {
-    INJECT_STATE_IDLE,
-    INJECT_STATE_WORKING,
-    INJECT_STATE_TASK_SUCCEEDED,
-    INJECT_STATE_SCRIPT_SUCCEEDED,
-    INJECT_STATE_FAILED,
-    INJECT_STATE_NOT_INITIALIZED,
+/* Enums */
+// ToDo: change to initialized -> idle -> working -> idle -> not_initialized
+// (SUCCESS/FAIL states aren't needed, proper events could be fired while processing)
+typedef enum
+{
+	INJECT_STATE_IDLE,
+	INJECT_STATE_WORKING,
+	INJECT_STATE_TASK_SUCCEEDED,
+	INJECT_STATE_SCRIPT_SUCCEEDED,
+	INJECT_STATE_FAILED,
+	INJECT_STATE_NOT_INITIALIZED,
 } inject_state_t;
 
-typedef struct {
-    uint8_t current_rf_address[5];
-
-    uint8_t base_addr[4];
-    uint8_t prefix;
-
-    uint8_t tx_delay_ms;
-
-    app_timer_id_t timer_next_action;
-    inject_state_t state;
-    nrf_esb_payload_t tmp_tx_payload;
-
-    int retransmit_counter;
-
-    bool execute; //indicates if new tasks are executed immediately (true) or enqueued (false)
-    inject_task_t current_task; //current task from queue (header data)
-    uint8_t current_task_data[LOGITACKER_SCRIPT_ENGINE_MAX_TASK_DATA_MAX_SIZE]; //current task from queue (content)
-
-    logitacker_devices_unifying_device_t *p_device;
-    logitacker_tx_payload_provider_t *p_payload_provider; // depends on current task, provides TX payloads, till task has finished
-
-    bool usb_inject;
+/* Structures */
+typedef struct
+{
+	uint8_t									current_rf_address[5];
+	uint8_t									base_addr[4];
+	uint8_t									prefix;
+	uint8_t									tx_delay_ms;
+	app_timer_id_t							timer_next_action;
+	inject_state_t							state;
+	nrf_esb_payload_t						tmp_tx_payload;
+	int										retransmit_counter;
+	bool									execute; // indicates if new tasks are executed immediately (true) or enqueued (false)
+	inject_task_t							current_task; // current task from queue (header data)
+	uint8_t									current_task_data[LOGITACKER_SCRIPT_ENGINE_MAX_TASK_DATA_MAX_SIZE]; //current task from queue (content)
+	bool									usb_inject;
+	logitacker_devices_unifying_device_t	*p_device;
+	logitacker_tx_payload_provider_t *		p_payload_provider; // depends on current task, provides TX payloads, till task has finished
 } logitacker_processor_inject_ctx_t;
 
+/* Functions */
 static void processor_inject_hid_keyboard_event_handler(logitacker_processor_t *p_processor, app_usbd_class_inst_t const *p_inst, app_usbd_hid_user_event_t event);
-
 static void processor_inject_hid_keyboard_event_handler_(logitacker_processor_inject_ctx_t *self, app_usbd_class_inst_t const *p_inst, app_usbd_hid_user_event_t event);
 
+void processor_inject_init_func				(logitacker_processor_t *p_processor);
+void processor_inject_deinit_func			(logitacker_processor_t *p_processor);
+void processor_inject_esb_handler_func		(logitacker_processor_t *p_processor, nrf_esb_evt_t *p_esb_evt);
+void processor_inject_timer_handler_func	(logitacker_processor_t *p_processor, void *p_timer_ctx);
+void processor_inject_bsp_handler_func		(logitacker_processor_t *p_processor, bsp_event_t event);
 
-void processor_inject_init_func(logitacker_processor_t *p_processor);
-
-void processor_inject_init_func_(logitacker_processor_inject_ctx_t *self);
-
-void processor_inject_deinit_func(logitacker_processor_t *p_processor);
-
-void processor_inject_deinit_func_(logitacker_processor_inject_ctx_t *self);
-
-void processor_inject_esb_handler_func(logitacker_processor_t *p_processor, nrf_esb_evt_t *p_esb_evt);
-
-void processor_inject_esb_handler_func_(logitacker_processor_inject_ctx_t *self, nrf_esb_evt_t *p_esb_event);
-
-void processor_inject_timer_handler_func(logitacker_processor_t *p_processor, void *p_timer_ctx);
-
-void processor_inject_timer_handler_func_(logitacker_processor_inject_ctx_t *self, void *p_timer_ctx);
-
-void processor_inject_bsp_handler_func(logitacker_processor_t *p_processor, bsp_event_t event);
-
-void processor_inject_bsp_handler_func_(logitacker_processor_inject_ctx_t *self, bsp_event_t event);
+void processor_inject_init_func_			(logitacker_processor_inject_ctx_t *self);
+void processor_inject_deinit_func_			(logitacker_processor_inject_ctx_t *self);
+void processor_inject_esb_handler_func_		(logitacker_processor_inject_ctx_t *self, nrf_esb_evt_t *p_esb_event);
+void processor_inject_timer_handler_func_	(logitacker_processor_inject_ctx_t *self, void *p_timer_ctx);
+void processor_inject_bsp_handler_func_		(logitacker_processor_inject_ctx_t *self, bsp_event_t event);
 
 void transfer_state(logitacker_processor_inject_ctx_t *self, inject_state_t new_state);
-
 void logitacker_processor_inject_run_next_task(logitacker_processor_inject_ctx_t *self);
 
-static logitacker_processor_t m_processor = {0};
-static logitacker_processor_inject_ctx_t m_static_inject_ctx; //we reuse the same context, alternatively an malloc'ed ctx would allow separate instances
+/* Variables */
+static logitacker_processor_t				m_processor = {0};
+static logitacker_processor_inject_ctx_t	m_static_inject_ctx; // we reuse the same context, alternatively an malloc'ed ctx would allow separate instances
+static char									addr_str_buff[LOGITACKER_DEVICE_ADDR_STR_LEN] = {0};
+static uint8_t								tmp_addr[LOGITACKER_DEVICE_ADDR_LEN] = {0};
+static logitacker_devices_unifying_device_t	tmp_device = {0};
+//static bool									m_ringbuf_initialized;
 
-static char addr_str_buff[LOGITACKER_DEVICE_ADDR_STR_LEN] = {0};
-static uint8_t tmp_addr[LOGITACKER_DEVICE_ADDR_LEN] = {0};
-static logitacker_devices_unifying_device_t tmp_device = {0};
-//static bool m_ringbuf_initialized;
 
-logitacker_processor_t *contruct_processor_inject_instance(logitacker_processor_inject_ctx_t *const inject_ctx) {
-    m_processor.p_ctx = inject_ctx;
-    m_processor.p_init_func = processor_inject_init_func;
-    m_processor.p_deinit_func = processor_inject_deinit_func;
-    m_processor.p_esb_handler = processor_inject_esb_handler_func;
+
+logitacker_processor_t *contruct_processor_inject_instance(logitacker_processor_inject_ctx_t *const inject_ctx)
+{
+    m_processor.p_ctx			= inject_ctx;
+    m_processor.p_init_func		= processor_inject_init_func;
+    m_processor.p_deinit_func	= processor_inject_deinit_func;
+    m_processor.p_esb_handler	= processor_inject_esb_handler_func;
     m_processor.p_timer_handler = processor_inject_timer_handler_func;
-    m_processor.p_bsp_handler = processor_inject_bsp_handler_func;
+    m_processor.p_bsp_handler	= processor_inject_bsp_handler_func;
     m_processor.p_usb_hid_keyboard_event_handler = processor_inject_hid_keyboard_event_handler;
-
     return &m_processor;
 }
 
-static void processor_inject_hid_keyboard_event_handler(logitacker_processor_t *p_processor, app_usbd_class_inst_t const *p_inst, app_usbd_hid_user_event_t event) {
-    processor_inject_hid_keyboard_event_handler_((logitacker_processor_inject_ctx_t *) p_processor->p_ctx, p_inst, event);
+static void processor_inject_hid_keyboard_event_handler(
+		logitacker_processor_t			*p_processor,
+		app_usbd_class_inst_t const		*p_inst,
+		app_usbd_hid_user_event_t		event)
+{
+	processor_inject_hid_keyboard_event_handler_((logitacker_processor_inject_ctx_t *) p_processor->p_ctx, p_inst, event);
 }
 
-static void processor_inject_hid_keyboard_event_handler_(logitacker_processor_inject_ctx_t *self, app_usbd_class_inst_t const *p_inst, app_usbd_hid_user_event_t event)
+static void processor_inject_hid_keyboard_event_handler_(
+		logitacker_processor_inject_ctx_t	*self,
+		app_usbd_class_inst_t const			*p_inst,
+		app_usbd_hid_user_event_t			event)
 {
-    switch (event)
-    {
-        case APP_USBD_HID_USER_EVT_OUT_REPORT_READY:
-        {
-            NRF_LOG_INFO("inject: APP_USBD_HID_USER_EVT_OUT_REPORT_READY");
-            break;
-        }
-        case APP_USBD_HID_USER_EVT_IN_REPORT_DONE:
-        {
-            NRF_LOG_DEBUG("inject: APP_USBD_HID_USER_EVT_IN_REPORT_DONE");
-            self->retransmit_counter = 0;
-
-            if (self->p_payload_provider == NULL) {
-                transfer_state(self, INJECT_STATE_IDLE);
-                return;
-            }
-
-            if (g_logitacker_global_config.bootmode == OPTION_LOGITACKER_BOOTMODE_USB_INJECT &&
-                g_logitacker_global_config.usbinject_trigger == OPTION_LOGITACKER_USBINJECT_TRIGGER_ON_LEDUPDATE &&
-                !g_logitacker_global_runtime_state.usb_inject_script_triggered) {
-
-                app_timer_start(self->timer_next_action, APP_TIMER_TICKS(LOGITACKER_PROCESSOR_INJECT_USB_LED_TRIGGER_INJECTION_PRE_DELAY_MS), NULL);
-                g_logitacker_global_runtime_state.usb_inject_script_triggered = true;
-                bsp_board_led_on(LED_G);
-            } else {
-                // fetch next payload
-                if ((*self->p_payload_provider->p_get_next)(self->p_payload_provider, &self->tmp_tx_payload)) {
-                    //next payload retrieved
-                    NRF_LOG_DEBUG("New payload retrieved from TX_payload_provider");
-
-                    // schedule payload transmission
-                    //app_timer_start(self->timer_next_action, APP_TIMER_TICKS(self->tx_delay_ms), NULL); //no delay for USB
-                    processor_inject_timer_handler_func_(self, self->timer_next_action);
-
-                } else {
-                    // no more payloads, we succeeded
-                    transfer_state(self, INJECT_STATE_TASK_SUCCEEDED);
-                }
-            }
-
-
-            break;
-        }
-        case APP_USBD_HID_USER_EVT_SET_BOOT_PROTO:
-        {
-            NRF_LOG_INFO("inject: APP_USBD_HID_USER_EVT_SET_BOOT_PROTO");
-            break;
-        }
-        case APP_USBD_HID_USER_EVT_SET_REPORT_PROTO:
-        {
-            NRF_LOG_INFO("inject: APP_USBD_HID_USER_EVT_SET_REPORT_PROTO");
-            break;
-        }
-        default:
-            break;
-    }
+	switch (event)
+	{
+		case APP_USBD_HID_USER_EVT_OUT_REPORT_READY: {
+				NRF_LOG_INFO("inject: APP_USBD_HID_USER_EVT_OUT_REPORT_READY");
+				break;
+			}
+		case APP_USBD_HID_USER_EVT_IN_REPORT_DONE: {
+				NRF_LOG_DEBUG("inject: APP_USBD_HID_USER_EVT_IN_REPORT_DONE");
+				self->retransmit_counter = 0;
+				if (self->p_payload_provider == NULL)
+				{
+					transfer_state(self, INJECT_STATE_IDLE);
+					return;
+				}
+				if (g_logitacker_global_config.bootmode == OPTION_LOGITACKER_BOOTMODE_USB_INJECT &&
+						g_logitacker_global_config.usbinject_trigger == OPTION_LOGITACKER_USBINJECT_TRIGGER_ON_LEDUPDATE &&
+						!g_logitacker_global_runtime_state.usb_inject_script_triggered)
+				{
+					app_timer_start(self->timer_next_action, APP_TIMER_TICKS(LOGITACKER_PROCESSOR_INJECT_USB_LED_TRIGGER_INJECTION_PRE_DELAY_MS), NULL);
+					g_logitacker_global_runtime_state.usb_inject_script_triggered = true;
+					bsp_board_led_on(LED_G);
+				}
+				else
+				{
+					// fetch next payload
+					if ((*self->p_payload_provider->p_get_next)(self->p_payload_provider, &self->tmp_tx_payload))
+					{
+						//next payload retrieved
+						NRF_LOG_DEBUG("New payload retrieved from TX_payload_provider");
+						// schedule payload transmission
+						//app_timer_start(self->timer_next_action, APP_TIMER_TICKS(self->tx_delay_ms), NULL); //no delay for USB
+						processor_inject_timer_handler_func_(self, self->timer_next_action);
+					}
+					else
+					{
+						// no more payloads, we succeeded
+						transfer_state(self, INJECT_STATE_TASK_SUCCEEDED);
+					}
+				}
+				break;
+			}
+		case APP_USBD_HID_USER_EVT_SET_BOOT_PROTO: {
+				NRF_LOG_INFO("inject: APP_USBD_HID_USER_EVT_SET_BOOT_PROTO");
+				break;
+			}
+		case APP_USBD_HID_USER_EVT_SET_REPORT_PROTO: {
+				NRF_LOG_INFO("inject: APP_USBD_HID_USER_EVT_SET_REPORT_PROTO");
+				break;
+			}
+		default:
+			break;
+	}
 }
 
 void processor_inject_init_func(logitacker_processor_t *p_processor) {
-    processor_inject_init_func_((logitacker_processor_inject_ctx_t *) p_processor->p_ctx);
+	processor_inject_init_func_((logitacker_processor_inject_ctx_t *) p_processor->p_ctx);
 }
 
 void processor_inject_deinit_func(logitacker_processor_t *p_processor) {
-    processor_inject_deinit_func_((logitacker_processor_inject_ctx_t *) p_processor->p_ctx);
+	processor_inject_deinit_func_((logitacker_processor_inject_ctx_t *) p_processor->p_ctx);
 }
 
 void processor_inject_esb_handler_func(logitacker_processor_t *p_processor, nrf_esb_evt_t *p_esb_evt) {
-    processor_inject_esb_handler_func_((logitacker_processor_inject_ctx_t *) p_processor->p_ctx, p_esb_evt);
+	processor_inject_esb_handler_func_((logitacker_processor_inject_ctx_t *) p_processor->p_ctx, p_esb_evt);
 }
 
 void processor_inject_timer_handler_func(logitacker_processor_t *p_processor, void *p_timer_ctx) {
-    processor_inject_timer_handler_func_((logitacker_processor_inject_ctx_t *) p_processor->p_ctx, p_timer_ctx);
+	processor_inject_timer_handler_func_((logitacker_processor_inject_ctx_t *) p_processor->p_ctx, p_timer_ctx);
 }
 
 void processor_inject_bsp_handler_func(logitacker_processor_t *p_processor, bsp_event_t event) {
-    processor_inject_bsp_handler_func_((logitacker_processor_inject_ctx_t *) p_processor->p_ctx, event);
+	processor_inject_bsp_handler_func_((logitacker_processor_inject_ctx_t *) p_processor->p_ctx, event);
 }
 
 void processor_inject_bsp_handler_func_(logitacker_processor_inject_ctx_t *self, bsp_event_t event) {
-    // do nothing
+	// do nothing
 }
 
+void processor_inject_init_func_(logitacker_processor_inject_ctx_t *self)
+{
+	//*self->p_logitacker_mainstate = LOGITACKER_MODE_INJECT;
+	switch (g_logitacker_global_config.workmode)
+	{
+		case OPTION_LOGITACKER_WORKMODE_LIGHTSPEED:
+			self->tx_delay_ms = INJECT_TX_DELAY_MS_LIGHTSPEED;
+			break;
+		case OPTION_LOGITACKER_WORKMODE_G700:
+			self->tx_delay_ms = INJECT_TX_DELAY_MS_LIGHTSPEED;
+			break;
+		case OPTION_LOGITACKER_WORKMODE_UNIFYING:
+			self->tx_delay_ms = INJECT_TX_DELAY_MS_UNIFYING;
+			break;
+	}
 
-void processor_inject_init_func_(logitacker_processor_inject_ctx_t *self) {
-//    *self->p_logitacker_mainstate = LOGITACKER_MODE_INJECT;
+	helper_addr_to_base_and_prefix(self->base_addr, &self->prefix,
+		self->current_rf_address, LOGITACKER_DEVICE_ADDR_LEN);
 
-    switch (g_logitacker_global_config.workmode) {
-        case OPTION_LOGITACKER_WORKMODE_LIGHTSPEED:
-            self->tx_delay_ms = INJECT_TX_DELAY_MS_LIGHTSPEED;
-            break;
-        case OPTION_LOGITACKER_WORKMODE_G700:
-            self->tx_delay_ms = INJECT_TX_DELAY_MS_LIGHTSPEED;
-            break;
-        case OPTION_LOGITACKER_WORKMODE_UNIFYING:
-            self->tx_delay_ms = INJECT_TX_DELAY_MS_UNIFYING;
-            break;
-    }
+	helper_addr_to_hex_str(addr_str_buff, LOGITACKER_DEVICE_ADDR_LEN, self->current_rf_address);
+	NRF_LOG_INFO("Initializing injection mode for %s", addr_str_buff);
 
-    helper_addr_to_base_and_prefix(self->base_addr, &self->prefix, self->current_rf_address,
-                                   LOGITACKER_DEVICE_ADDR_LEN);
+	radio_disable_rx_timeout_event(); // disable RX timeouts
+	radio_stop_channel_hopping(); // disable channel hopping
+	nrf_esb_stop_rx(); //stop rx in case running
 
-    helper_addr_to_hex_str(addr_str_buff, LOGITACKER_DEVICE_ADDR_LEN, self->current_rf_address);
-    NRF_LOG_INFO("Initializing injection mode for %s", addr_str_buff);
+	// set current address for pipe 1
+	nrf_esb_enable_pipes(0x00); //disable all pipes
+	nrf_esb_set_base_address_0(self->base_addr); // set base addr 0
+	nrf_esb_update_prefix(0, self->prefix); // set prefix and enable pipe 0
+	nrf_esb_enable_pipes(0x01); //enable pipe 0
 
-    radio_disable_rx_timeout_event(); // disable RX timeouts
-    radio_stop_channel_hopping(); // disable channel hopping
-    nrf_esb_stop_rx(); //stop rx in case running
+	// clear TX/RX payload buffers (just to be sure)
+	memset(&self->tmp_tx_payload, 0, sizeof(self->tmp_tx_payload)); //unset TX payload
 
-    // set current address for pipe 1
-    nrf_esb_enable_pipes(0x00); //disable all pipes
-    nrf_esb_set_base_address_0(self->base_addr); // set base addr 0
-    nrf_esb_update_prefix(0, self->prefix); // set prefix and enable pipe 0
-    nrf_esb_enable_pipes(0x01); //enable pipe 0
+	// prepare test TX payload (first report will be a pairing request)
+	self->tmp_tx_payload.noack = false;
+	self->state = INJECT_STATE_IDLE;
 
+	self->retransmit_counter = 0;
 
-    // clear TX/RX payload buffers (just to be sure)
-    memset(&self->tmp_tx_payload, 0, sizeof(self->tmp_tx_payload)); //unset TX payload
+	// setup radio as PTX
+	nrf_esb_set_mode(NRF_ESB_MODE_PTX);
 
-    // prepare test TX payload (first report will be a pairing request)
-    self->tmp_tx_payload.noack = false;
-    self->state = INJECT_STATE_IDLE;
+	switch (g_logitacker_global_config.workmode)
+	{
+		case OPTION_LOGITACKER_WORKMODE_LIGHTSPEED:
+			nrf_esb_update_channel_frequency_table_lightspeed();
+			break;
+		case OPTION_LOGITACKER_WORKMODE_UNIFYING:
+			nrf_esb_update_channel_frequency_table_unifying();
+			break;
+		case OPTION_LOGITACKER_WORKMODE_G700:
+			nrf_esb_update_channel_frequency_table_unifying();
+			break;
+	}
 
-    self->retransmit_counter = 0;
-
-    // setup radio as PTX
-    nrf_esb_set_mode(NRF_ESB_MODE_PTX);
-
-    switch (g_logitacker_global_config.workmode) {
-        case OPTION_LOGITACKER_WORKMODE_LIGHTSPEED:
-            nrf_esb_update_channel_frequency_table_lightspeed();
-            break;
-        case OPTION_LOGITACKER_WORKMODE_UNIFYING:
-            nrf_esb_update_channel_frequency_table_unifying();
-            break;
-        case OPTION_LOGITACKER_WORKMODE_G700:
-            nrf_esb_update_channel_frequency_table_unifying();
-            break;
-    }
-
-    nrf_esb_enable_all_channel_tx_failover(true); //retransmit payloads on all channels if transmission fails
-    nrf_esb_set_all_channel_tx_failover_loop_count(2); //iterate over channels two time before failing
-    nrf_esb_set_retransmit_count(1);
-    nrf_esb_set_retransmit_delay(250);
-    nrf_esb_set_tx_power(NRF_ESB_TX_POWER_8DBM);
+	nrf_esb_enable_all_channel_tx_failover(true); //retransmit payloads on all channels if transmission fails
+	nrf_esb_set_all_channel_tx_failover_loop_count(2); //iterate over channels two time before failing
+	nrf_esb_set_retransmit_count(1);
+	nrf_esb_set_retransmit_delay(250);
+	nrf_esb_set_tx_power(NRF_ESB_TX_POWER_8DBM);
 }
 
 void processor_inject_deinit_func_(logitacker_processor_inject_ctx_t *self) {

@@ -93,9 +93,13 @@ void discovery_process_rx(logitacker_processor_discover_ctx_t *self)
 				// classify device (determin if it is Logitech)
 				logitacker_devices_device_update_classification(p_device, *p_rx_payload);
 				if (p_device->p_dongle != NULL) {
-					if (p_device->p_dongle->classification == DONGLE_CLASSIFICATION_IS_LOGITECH_UNIFYING || p_device->p_dongle->classification == DONGLE_CLASSIFICATION_IS_LOGITECH_G700|| p_device->p_dongle->classification == DONGLE_CLASSIFICATION_IS_LOGITECH_LIGHTSPEED) {
+					if (p_device->p_dongle->classification == DONGLE_CLASSIFICATION_IS_LOGITECH_UNIFYING
+							|| p_device->p_dongle->classification == DONGLE_CLASSIFICATION_IS_LOGITECH_G700
+							|| p_device->p_dongle->classification == DONGLE_CLASSIFICATION_IS_LOGITECH_LIGHTSPEED)
+					{
 						NRF_LOG_INFO("discovered device is Logitech")
-							switch (g_logitacker_global_config.discovery_on_new_address) {
+							switch (g_logitacker_global_config.discovery_on_new_address)
+							{
 								case OPTION_DISCOVERY_ON_NEW_ADDRESS_CONTINUE:
 									break;
 								case OPTION_DISCOVERY_ON_NEW_ADDRESS_SWITCH_ACTIVE_ENUMERATION:
@@ -104,7 +108,6 @@ void discovery_process_rx(logitacker_processor_discover_ctx_t *self)
 									} else {
 										NRF_LOG_INFO("active enumeration for device already performed, continue deiscovery")
 									}
-
 									break;
 								case OPTION_DISCOVERY_ON_NEW_ADDRESS_SWITCH_PASSIVE_ENUMERATION:
 									logitacker_enter_mode_passive_enum(addr);
@@ -126,20 +129,19 @@ void discovery_process_rx(logitacker_processor_discover_ctx_t *self)
 					} else if (p_device->p_dongle->classification == DONGLE_CLASSIFICATION_IS_NOT_LOGITECH) {
 						NRF_LOG_INFO("Discovered device doesn't seem to be Logitech, removing from list again...");
 						NRF_LOG_HEXDUMP_INFO(p_rx_payload->data, p_rx_payload->length);
-						if (p_device != NULL) logitacker_devices_del_device(p_device->rf_address);
+						if (p_device != NULL)
+							logitacker_devices_del_device(p_device->rf_address);
 					} else {
-						NRF_LOG_INFO("discovered device not classified, yet. Likely because RX frame was empty ... removing device from list")
-							if (p_device != NULL) logitacker_devices_del_device(p_device->rf_address);
+						NRF_LOG_INFO("discovered device not classified, yet. Likely because RX frame was empty ... removing device from list");
+						if (p_device != NULL)
+							logitacker_devices_del_device(p_device->rf_address);
 					}
 				}
 			}
-
 		} else {
 			NRF_LOG_WARNING("invalid promiscuous frame in discover mode, shouldn't happen because of filtering");
 		}
-
 	}
-
 }
 
 
