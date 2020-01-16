@@ -199,20 +199,20 @@ uint32_t logitacker_radio_convert_promiscuous_frame_to_default_frame(
 {
 	if (p_out_payload == NULL)
 		return NRF_ERROR_INVALID_PARAM;
-// pipe 1 byte, len 1 byte, addr 5 bytes, pcf 1 byte (8 highest bits), crc16 2 bytes
-// min_len == header
-	int min_len = 10;
+/* header_len = pipe 1 byte + len 1 byte + addr 5 bytes + pcf 1 byte (8 highest bits) + crc16 2 bytes */
+	int header_len = 10;
 
-	if (in_promiscuous_payload.length < min_len)
+	if (in_promiscuous_payload.length < header_len)
 		return NRF_ERROR_DATA_SIZE;
 
-	p_out_payload->length = in_promiscuous_payload.length - min_len;
+	p_out_payload->length				= in_promiscuous_payload.length - header_len;
 	memcpy(p_out_payload->data, &in_promiscuous_payload.data[8], p_out_payload->length);
 
-	p_out_payload->pid = in_promiscuous_payload.data[7] & 0x03; //mask PID bits of PCF remainder
-	p_out_payload->rssi = in_promiscuous_payload.rssi;
-	p_out_payload->rx_channel = in_promiscuous_payload.rx_channel;
-	p_out_payload->rx_channel_index = in_promiscuous_payload.rx_channel_index;
+	/* mask PID bits of PCF remainder */
+	p_out_payload->pid					= in_promiscuous_payload.data[7] & 0x03;
+	p_out_payload->rssi					= in_promiscuous_payload.rssi;
+	p_out_payload->rx_channel			= in_promiscuous_payload.rx_channel;
+	p_out_payload->rx_channel_index		= in_promiscuous_payload.rx_channel_index;
 
 	//Note: correct pipe couldn't be assigned, as promiscuous mode has no valid addresses
 	//Note: no_ack couldn't be assigned, as promiscuous mode PCF field has last bit stripped

@@ -12,6 +12,9 @@
 #include "logitacker_script_engine.h"
 #include "logitacker_usb.h"
 
+#define ADDR_LEN		5
+#define BASE_LEN		4
+
 NRF_LOG_MODULE_REGISTER();
 
 
@@ -40,30 +43,38 @@ void processor_discover_radio_handler_func_(logitacker_processor_discover_ctx_t 
 void processor_discover_bsp_handler_func_(logitacker_processor_discover_ctx_t *self, bsp_event_t event);
 
 
-/* Process received data */
+/* Process received data RX */
 void discovery_process_rx(logitacker_processor_discover_ctx_t *self)
 {
+	uint8_t addr[ADDR_LEN]		= {0};
+	uint8_t len					= p_rx_payload->length;
+	uint8_t ch					= p_rx_payload->rx_channel;
+	uint8_t ch_idx				= p_rx_payload->rx_channel_index;
+	uint8_t prefix				= 0;
+	uint8_t base[BASE_LEN]		= {0};
+
 	nrf_esb_payload_t *p_rx_payload = &self->tmp_rx_payload;
 
+	/* While reading RX payloads. */
 	while (nrf_esb_read_rx_payload(p_rx_payload) == NRF_SUCCESS)
 	{
 		if (p_rx_payload->validated_promiscuous_frame)
 		{
-			uint8_t len			= p_rx_payload->length;
-			uint8_t ch_idx		= p_rx_payload->rx_channel_index;
-			uint8_t ch			= p_rx_payload->rx_channel;
-			uint8_t addr[5];
-			memcpy(addr, &p_rx_payload->data[2], 5);
+			len				= p_rx_payload->length;
+			ch				= p_rx_payload->rx_channel;
+			ch_idx			= p_rx_payload->rx_channel_index;
+			prefix			= 0;
+			base[BASE_LEN]	= {0};
 
-			if (g_logitacker_global_config.discover_pass_through_hidraw)
-			{
+			/* copy address from rx */
+			memcpy(addr, &p_rx_payload->data[2], ADDR_LEN);
+
+			if (g_logitacker_global_config.discover_pass_through_hidraw) {
 				logitacker_usb_write_hidraw_input_report_rf_frame(LOGITACKER_MODE_DISCOVERY, addr, p_rx_payload);
 			}
 
-			uint8_t prefix;
-			uint8_t base[4];
 			//convert device addr to base+prefix and update device
-			helper_addr_to_base_and_prefix(base, &prefix, addr, 5);
+			helper_addr_to_base_and_prefix(base, &prefix, addr, ADDR_LEN);
 
 			helper_addr_to_hex_str(addr_str_buff, LOGITACKER_DEVICE_ADDR_LEN, addr);
 			NRF_LOG_INFO("DISCOVERY: received valid ESB frame (addr %s, len: %d, ch idx %d, raw ch %d, rssi %d)", addr_str_buff, len, ch_idx, ch, p_rx_payload->rssi);
@@ -79,7 +90,6 @@ void discovery_process_rx(logitacker_processor_discover_ctx_t *self)
 					// restore from flash failed, create in ram
 					logitacker_devices_create_device(&p_device, addr);
 				}
-
 			}
 
 			// update device counters
@@ -211,54 +221,55 @@ void processor_discover_esb_handler_func_(logitacker_processor_discover_ctx_t *s
 
 }
 
-void processor_discover_radio_handler_func_(logitacker_processor_discover_ctx_t *self, radio_evt_t const *p_event) {
-    //helper_log_priority("UNIFYING_event_handler");
-    switch (p_event->evt_id)
-    {
-        case RADIO_EVENT_NO_RX_TIMEOUT:
-        {
-            NRF_LOG_INFO("discover: no RX on current channel for %d ms ... restart channel hopping ...", LOGITACKER_DISCOVERY_STAY_ON_CHANNEL_AFTER_RX_MS);
-            radio_start_channel_hopping(LOGITACKER_DISCOVERY_CHANNEL_HOP_INTERVAL_MS, 0, true); //start channel hopping directly (0ms delay) with 30ms hop interval, automatically stop hopping on RX
-            break;
-        }
-        case RADIO_EVENT_CHANNEL_CHANGED_FIRST_INDEX:
-        {
-            NRF_LOG_DEBUG("discover MODE channel hop reached first channel");
-            bsp_board_led_invert(LED_B); // toggle scan LED everytime we jumped through all channels
-            break;
-        }
-        default:
-            break;
-    }
-
+void processor_discover_radio_handler_func_(logitacker_processor_discover_ctx_t *self, radio_evt_t const *p_event)
+{
+	//helper_log_priority("UNIFYING_event_handler");
+	switch (p_event->evt_id)
+	{
+		case RADIO_EVENT_NO_RX_TIMEOUT: {
+				NRF_LOG_INFO("discover: no RX on current channel for %d ms ... restart channel hopping ...",
+					LOGITACKER_DISCOVERY_STAY_ON_CHANNEL_AFTER_RX_MS);
+				 //start channel hopping directly (0ms delay) with 30ms hop interval, automatically stop hopping on RX
+				radio_start_channel_hopping(LOGITACKER_DISCOVERY_CHANNEL_HOP_INTERVAL_MS, 0, true);
+				break;
+		}
+		case RADIO_EVENT_CHANNEL_CHANGED_FIRST_INDEX: {
+				NRF_LOG_DEBUG("discover MODE channel hop reached first channel");
+				bsp_board_led_invert(LED_B); // toggle scan LED everytime we jumped through all channels
+				break;
+		}
+		default:
+			break;
+	}
 }
 
-void processor_discover_bsp_handler_func_(logitacker_processor_discover_ctx_t *self, bsp_event_t event) {
-    NRF_LOG_INFO("Discovery BSP event: %d", (unsigned int) event);
-}
-
-
-logitacker_processor_t * contruct_processor_discover_instance(logitacker_processor_discover_ctx_t *const discover_ctx) {
-    m_processor.p_ctx = discover_ctx;
-
-    m_processor.p_init_func = processor_discover_init_func;
-    m_processor.p_deinit_func = processor_discover_deinit_func;
-    m_processor.p_esb_handler = processor_discover_esb_handler_func;
-//    m_processor.p_timer_handler = processor_active_enum_timer_handler_func;
-    m_processor.p_bsp_handler = processor_discover_bsp_handler_func;
-    m_processor.p_radio_handler = processor_discover_radio_handler_func;
-
-    return &m_processor;
+void processor_discover_bsp_handler_func_(
+		logitacker_processor_discover_ctx_t *self,
+		bsp_event_t event)
+{
+	NRF_LOG_INFO("Discovery BSP event: %d", (unsigned int) event);
 }
 
 
-logitacker_processor_t * new_processor_discover() {
-    // initialize context (static in this case, has to use malloc for new instances)
-    logitacker_processor_discover_ctx_t *const p_ctx = &m_static_discover_ctx;
-    memset(p_ctx, 0, sizeof(*p_ctx)); //replace with malloc for dedicated instance
+logitacker_processor_t *contruct_processor_discover_instance(
+		logitacker_processor_discover_ctx_t *const discover_ctx)
+{
+	m_processor.p_ctx				= discover_ctx;
+	m_processor.p_init_func			= processor_discover_init_func;
+	m_processor.p_deinit_func		= processor_discover_deinit_func;
+	m_processor.p_esb_handler		= processor_discover_esb_handler_func;
+	//m_processor.p_timer_handler		= processor_active_enum_timer_handler_func;
+	m_processor.p_bsp_handler		= processor_discover_bsp_handler_func;
+	m_processor.p_radio_handler		= processor_discover_radio_handler_func;
+	return &m_processor;
+}
 
 
-
-    return contruct_processor_discover_instance(&m_static_discover_ctx);
+logitacker_processor_t * new_processor_discover(void)
+{
+	// initialize context (static in this case, has to use malloc for new instances)
+	logitacker_processor_discover_ctx_t *const p_ctx = &m_static_discover_ctx;
+	memset(p_ctx, 0, sizeof(*p_ctx)); //replace with malloc for dedicated instance
+	return contruct_processor_discover_instance(&m_static_discover_ctx);
 }
 

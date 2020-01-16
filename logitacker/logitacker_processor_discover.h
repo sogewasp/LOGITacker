@@ -4,6 +4,6 @@
 #include "stdint.h"
 #include "logitacker_processor.h"
 
-logitacker_processor_t * new_processor_discover();
+logitacker_processor_t *new_processor_discover(void);
 
 #endif //LOGITACKER_PROCESSOR_DISCOVER_H

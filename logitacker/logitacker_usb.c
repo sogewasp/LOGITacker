@@ -313,7 +313,7 @@ static void usbd_hid_mouse_event_handler(app_usbd_class_inst_t const *p_inst, ap
  * USBD peripheral would be ready to accept commands, and library would be ready,
  * but it would not be connected to the bus.
  * Call app_usbd_enable to enable USBD communication with the host. */
-uint32_t logitacker_usb_init()
+uint32_t logitacker_usb_init(void)
 {
 	uint32_t ret = 0;
 	ret = app_usbd_init(&usbd_config);
@@ -357,7 +357,6 @@ uint32_t logitacker_usb_init()
 		APP_ERROR_CHECK(ret);
 	} else {
 		NRF_LOG_INFO("No USB power detection enabled\r\nStarting USB now");
-
 		app_usbd_enable();
 		app_usbd_start();
 	}
@@ -462,33 +461,40 @@ logitacker_usb_write_hidraw_input_report(logitacker_mode_t logitacker_mode, logi
                                               LOGITACKER_USB_HID_GENERIC_IN_REPORT_MAXSIZE);
 }
 
-uint32_t logitacker_usb_write_hidraw_input_report_rf_frame(logitacker_mode_t logitacker_mode,
-                                                           logitacker_devices_unifying_device_rf_address_t rf_address,
-                                                           const nrf_esb_payload_t *p_frame) {
-    VERIFY_PARAM_NOT_NULL(rf_address);
-    VERIFY_PARAM_NOT_NULL(p_frame);
+uint32_t logitacker_usb_write_hidraw_input_report_rf_frame(
+		logitacker_mode_t									logitacker_mode,
+		logitacker_devices_unifying_device_rf_address_t		rf_address,
+		const nrf_esb_payload_t								*p_frame)
+{
+	VERIFY_PARAM_NOT_NULL(rf_address);
+	VERIFY_PARAM_NOT_NULL(p_frame);
 
-    nrf_esb_payload_t frame = {0};
+	nrf_esb_payload_t frame = {0};
 
-    // ToDo: remove unneeded overhead, from redundant memcpy's
-    if (p_frame->validated_promiscuous_frame) {
-        // convert data
-        logitacker_radio_convert_promiscuous_frame_to_default_frame(&frame, *p_frame);
-    } else {
-        memcpy(&frame, p_frame, sizeof(nrf_esb_payload_t));
-    }
+	// ToDo: remove unneeded overhead, from redundant memcpy's
+	if (p_frame->validated_promiscuous_frame) {
+		// convert frame data
+		logitacker_radio_convert_promiscuous_frame_to_default_frame(&frame, *p_frame);
+	} else {
+		memcpy(&frame, p_frame, sizeof(nrf_esb_payload_t));
+	}
 
-    uint8_t framelen = frame.length > 32 ? 32 : frame.length;
-    logitacker_usb_hidraw_rf_frame_representation_t frame_hid_pay = {};
-    memcpy(frame_hid_pay.rf_address, rf_address, 5);
-    frame_hid_pay.payload_length = framelen;
-    frame_hid_pay.rf_channel = frame.rx_channel;
-    memcpy(frame_hid_pay.payload_data, frame.data, framelen);
-    //NRF_LOG_HEXDUMP_INFO(frame_hid_pay.payload_data, frame_hid_pay.payload_length);
-    frame_hid_pay.pid = frame.pid;
-    frame_hid_pay.rssi = frame.rssi;
+	uint8_t framelen = frame.length > 32 ? 32 : frame.length;
+	logitacker_usb_hidraw_rf_frame_representation_t frame_hid_pay = {0};
 
-    return logitacker_usb_write_hidraw_input_report(logitacker_mode, LOGITACKER_USB_HIDRAW_REPORT_TYPE_RF_FRAME,
-                                                    sizeof(logitacker_usb_hidraw_rf_frame_representation_t),
-                                                    &frame_hid_pay);
+	memcpy(frame_hid_pay.rf_address, rf_address, 5);
+
+	frame_hid_pay.payload_length		= framelen;
+	frame_hid_pay.rf_channel			= frame.rx_channel;
+	memcpy(frame_hid_pay.payload_data, frame.data, framelen);
+
+	//NRF_LOG_HEXDUMP_INFO(frame_hid_pay.payload_data, frame_hid_pay.payload_length);
+	frame_hid_pay.pid					= frame.pid;
+	frame_hid_pay.rssi					= frame.rssi;
+
+	return logitacker_usb_write_hidraw_input_report(
+		logitacker_mode,
+		LOGITACKER_USB_HIDRAW_REPORT_TYPE_RF_FRAME,
+		sizeof(logitacker_usb_hidraw_rf_frame_representation_t),
+		&frame_hid_pay);
 }
