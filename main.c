@@ -17,6 +17,7 @@
 #include "stdbool.h"
 #include "stddef.h"
 
+/* NRF */
 #include "nrf.h"
 #include "nrf_esb_illegalmod.h"
 #include "nrf_esb_illegalmod_error_codes.h"
@@ -29,7 +30,6 @@
 #include "app_timer.h"
 #include "app_error.h"
 #include "bsp.h"
-
 
 #include "logitacker_usb.h"
 
@@ -56,16 +56,14 @@
 //crypto
 #include "nrf_crypto.h"
 
-
-#define CHANNEL_HOP_RESTART_DELAY 1300
+#define CHANNEL_HOP_RESTART_DELAY	1300
+#define SCHED_QUEUE_SIZE			64
 
 // Scheduler settings
-#define SCHED_MAX_EVENT_DATA_SIZE   BYTES_PER_WORD*BYTES_TO_WORDS(MAX(NRF_ESB_CHECK_PROMISCUOUS_SCHED_EVENT_DATA_SIZE,MAX(APP_TIMER_SCHED_EVENT_DATA_SIZE,MAX(sizeof(nrf_esb_payload_t),sizeof(nrf_esb_evt_t)))))
-
-
-#define SCHED_QUEUE_SIZE            64
-
-
+#define SCHED_MAX_EVENT_DATA_SIZE   BYTES_PER_WORD * BYTES_TO_WORDS( \
+				MAX( NRF_ESB_CHECK_PROMISCUOUS_SCHED_EVENT_DATA_SIZE, \
+					MAX( APP_TIMER_SCHED_EVENT_DATA_SIZE, \
+						MAX( sizeof(nrf_esb_payload_t), sizeof(nrf_esb_evt_t) ))))
 
 #ifdef NRF52840_MDK
     bool with_log = true;
@@ -73,16 +71,14 @@
     bool with_log = false;
 #endif
 
-
 /*
 #define AUTO_BRUTEFORCE true
 static bool continue_frame_recording = true;
 static bool enough_frames_recorded = false;
 static bool continuo_redording_even_if_enough_frames = false;
-
-
 bool m_auto_bruteforce_started = false;
 uint8_t m_replay_count;
+
 void unifying_event_handler(unifying_evt_t const *p_event) {
     //helper_log_priority("UNIFYING_event_handler");
     switch (p_event->evt_id)
@@ -143,72 +139,65 @@ void unifying_event_handler(unifying_evt_t const *p_event) {
 NRF_CLI_CDC_ACM_DEF(m_cli_cdc_acm_transport);
 NRF_CLI_DEF(m_cli_cdc_acm, g_logitacker_cli_name, &m_cli_cdc_acm_transport.transport, '\r', 20);
 
-
-
-
 int main(void)
 {
-//    continue_frame_recording = true;
+// Note: For Makerdiary MDK dongle the button isn't working in event driven fashion
+// (only BSP SIMPLE seems to be supported).
+// Thus this code won't support button interaction on MDK dongle.
 
-    // Note: For Makerdiary MDK dongle the button isn't working in event driven fashion (only BSP SIMPLE seems to be 
-    // supported). Thus this code won't support button interaction on MDK dongle.
+//continue_frame_recording = true;
+	ret_code_t		ret;
+	APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
 
-    ret_code_t ret;
-    APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
-    
-    ret = NRF_LOG_INIT(NULL);
-    APP_ERROR_CHECK(ret);
+	ret = NRF_LOG_INIT(NULL);
+	APP_ERROR_CHECK(ret);
 
+	ret = nrf_drv_clock_init();
+	APP_ERROR_CHECK(ret);
 
-    ret = nrf_drv_clock_init();
-    APP_ERROR_CHECK(ret);
+	/* Requests the low-frequency clock */
+	nrf_drv_clock_lfclk_request(NULL);
+	while(!nrf_drv_clock_lfclk_is_running())
+	{
+		/* Just waiting */
+	}
 
-    nrf_drv_clock_lfclk_request(NULL);
+	bsp_board_led_invert(LED_G);
+	/* Initialize crypto backend */
+	ret = nrf_crypto_init();
+	APP_ERROR_CHECK(ret);
 
-    while(!nrf_drv_clock_lfclk_is_running())
-    {
-        /* Just waiting */
-    }
+	bsp_board_led_invert(LED_G);
+	/* Initialize app timer */
+	ret = app_timer_init();
+	APP_ERROR_CHECK(ret);
 
-    bsp_board_led_invert(LED_G);
-/*
- * Initialize crypto backend
- * https://infocenter.nordicsemi.com/topic/com.nordic.infocenter.sdk5.v15.3.0/group__nrf__crypto__initialization.html
- * */
-    ret = nrf_crypto_init();
-    APP_ERROR_CHECK(ret);
+	/* Logitracker initialization of all structures, clocks, process... */
+	logitacker_init();
 
-    bsp_board_led_invert(LED_G);
+	/* If log is enabled, initialize */
+	if (with_log) {
+		NRF_LOG_DEFAULT_BACKENDS_INIT();
+	} 
 
-    ret = app_timer_init();
-    APP_ERROR_CHECK(ret);
+	/* CLI configured as NRF_LOG backend */
+	ret = nrf_cli_init(&m_cli_cdc_acm, NULL, true, true, NRF_LOG_SEVERITY_INFO);
+	APP_ERROR_CHECK(ret);
 
-    logitacker_init();
+	ret = nrf_cli_start(&m_cli_cdc_acm);
+	APP_ERROR_CHECK(ret);
 
-    if (with_log) {
-        NRF_LOG_DEFAULT_BACKENDS_INIT();  
-    } 
+	//unifying_init(unifying_event_handler);
+	//timestamp_init();
 
-    /* CLI configured as NRF_LOG backend */
-    ret = nrf_cli_init(&m_cli_cdc_acm, NULL, true, true, NRF_LOG_SEVERITY_INFO);
-    APP_ERROR_CHECK(ret);
-    ret = nrf_cli_start(&m_cli_cdc_acm);
-    APP_ERROR_CHECK(ret);
-
-
-    //unifying_init(unifying_event_handler);
-
-
-//    timestamp_init();
-
-    while (true)
-    {
-        app_sched_execute(); //!! esb_promiscuous mode frame validation is handled by scheduler !!
-        //while (app_usbd_event_queue_process()) { }
-        nrf_cli_process(&m_cli_cdc_acm);
-
-        UNUSED_RETURN_VALUE(NRF_LOG_PROCESS());
-        /* Sleep CPU only if there was no interrupt since last loop processing */
-        __WFE();
-    }
+	while (true)
+	{
+		/* !! esb_promiscuous mode frame validation is handled by scheduler !! */
+		app_sched_execute();
+		//while (app_usbd_event_queue_process()) { }
+		nrf_cli_process(&m_cli_cdc_acm);
+		UNUSED_RETURN_VALUE(NRF_LOG_PROCESS());
+		/* Sleep CPU only if there was no interrupt since last loop processing */
+		__WFE();
+	}
 }

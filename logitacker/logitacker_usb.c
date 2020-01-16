@@ -46,55 +46,59 @@ static const app_usbd_hid_subclass_desc_t *hid_report_descriptors_mouse_device[]
 
 /* USB HID INTERFACES */
 // setup generic HID interface
-APP_USBD_HID_GENERIC_GLOBAL_DEF(m_app_hid_generic,
-                                LOGITACKER_USB_HID_GENERIC_INTERFACE,
-                                usbd_hid_generic_event_handler,
-                                LOGITACKER_USB_HID_GENERIC_INTERFACE_ENDPOINT_LIST(),
-                                hid_report_descriptors_raw_device,
-                                LOGITACKER_USB_HID_GENERIC_REPORT_IN_QUEUE_SIZE,
-                                LOGITACKER_USB_HID_GENERIC_OUT_REPORT_MAXSIZE,
-                                APP_USBD_HID_SUBCLASS_BOOT,
-                                APP_USBD_HID_PROTO_GENERIC);
+APP_USBD_HID_GENERIC_GLOBAL_DEF(
+        m_app_hid_generic,				// instance_name
+        LOGITACKER_USB_HID_GENERIC_INTERFACE,					// interface_number
+        usbd_hid_generic_event_handler,							// user_ev_handler
+        LOGITACKER_USB_HID_GENERIC_INTERFACE_ENDPOINT_LIST(),	// endpoint_list
+        hid_report_descriptors_raw_device,						// subclass_descriptors
+        LOGITACKER_USB_HID_GENERIC_REPORT_IN_QUEUE_SIZE,		// report_in_queue_size
+        LOGITACKER_USB_HID_GENERIC_OUT_REPORT_MAXSIZE,			// report_out_maxsize
+        APP_USBD_HID_SUBCLASS_BOOT,								// subclass_boot
+        APP_USBD_HID_PROTO_GENERIC);							// protocol
 
 // setup HID keyboard interface (as generic interface)
-
-APP_USBD_HID_GENERIC_GLOBAL_DEF(m_app_hid_keyboard,
-                                LOGITACKER_USB_HID_KEYBOARD_INTERFACE,
-                                usbd_hid_keyboard_event_handler,
-                                LOGITACKER_USB_HID_KEYBOARD_INTERFACE_ENDPOINT_LIST(),
-                                hid_report_descriptors_keyboard_device,
-                                LOGITACKER_USB_HID_KEYBOARD_REPORT_IN_QUEUE_SIZE,
-                                LOGITACKER_USB_HID_KEYBOARD_OUT_REPORT_MAXSIZE,
-                                APP_USBD_HID_SUBCLASS_BOOT,
-                                APP_USBD_HID_PROTO_KEYBOARD);
+APP_USBD_HID_GENERIC_GLOBAL_DEF(
+        m_app_hid_keyboard,
+        LOGITACKER_USB_HID_KEYBOARD_INTERFACE,
+        usbd_hid_keyboard_event_handler,
+        LOGITACKER_USB_HID_KEYBOARD_INTERFACE_ENDPOINT_LIST(),
+        hid_report_descriptors_keyboard_device,
+        LOGITACKER_USB_HID_KEYBOARD_REPORT_IN_QUEUE_SIZE,
+        LOGITACKER_USB_HID_KEYBOARD_OUT_REPORT_MAXSIZE,
+        APP_USBD_HID_SUBCLASS_BOOT,
+        APP_USBD_HID_PROTO_KEYBOARD);
 
 /*
-APP_USBD_HID_KBD_GLOBAL_DEF(m_app_hid_keyboard,
-                            LOGITACKER_USB_HID_KEYBOARD_INTERFACE,
-                            LOGITACKER_USB_HID_KEYBOARD_EPIN,
-                            usbd_hid_keyboard_event_handler,
-                            APP_USBD_HID_SUBCLASS_BOOT);
+APP_USBD_HID_KBD_GLOBAL_DEF(
+        m_app_hid_keyboard,
+        LOGITACKER_USB_HID_KEYBOARD_INTERFACE,
+        LOGITACKER_USB_HID_KEYBOARD_EPIN,
+        usbd_hid_keyboard_event_handler,
+        APP_USBD_HID_SUBCLASS_BOOT);
 */
 
 
 // setup HID mouse interface
-APP_USBD_HID_GENERIC_GLOBAL_DEF(m_app_hid_mouse,
-                                LOGITACKER_USB_HID_MOUSE_INTERFACE,
-                                usbd_hid_mouse_event_handler,
-                                LOGITACKER_USB_HID_MOUSE_INTERFACE_ENDPOINT_LIST(),
-                                hid_report_descriptors_mouse_device,
-                                LOGITACKER_USB_HID_MOUSE_REPORT_IN_QUEUE_SIZE,
-                                1,
-                                APP_USBD_HID_SUBCLASS_BOOT,
-                                APP_USBD_HID_PROTO_MOUSE);
+APP_USBD_HID_GENERIC_GLOBAL_DEF(
+        m_app_hid_mouse,
+        LOGITACKER_USB_HID_MOUSE_INTERFACE,
+        usbd_hid_mouse_event_handler,
+        LOGITACKER_USB_HID_MOUSE_INTERFACE_ENDPOINT_LIST(),
+        hid_report_descriptors_mouse_device,
+        LOGITACKER_USB_HID_MOUSE_REPORT_IN_QUEUE_SIZE,
+        1,
+        APP_USBD_HID_SUBCLASS_BOOT,
+        APP_USBD_HID_PROTO_MOUSE);
 
 /*
-APP_USBD_HID_MOUSE_GLOBAL_DEF(m_app_hid_mouse,
-                              LOGITACKER_USB_HID_MOUSE_INTERFACE,
-                              LOGITACKER_USB_HID_MOUSE_EPIN,
-                              LOGITACKER_USB_HID_MOUSE_BUTTON_COUNT,
-                              usbd_hid_mouse_event_handler,
-                              APP_USBD_HID_SUBCLASS_BOOT);
+APP_USBD_HID_MOUSE_GLOBAL_DEF(
+        m_app_hid_mouse,
+        LOGITACKER_USB_HID_MOUSE_INTERFACE,
+        LOGITACKER_USB_HID_MOUSE_EPIN,
+        LOGITACKER_USB_HID_MOUSE_BUTTON_COUNT,
+        usbd_hid_mouse_event_handler,
+        APP_USBD_HID_SUBCLASS_BOOT);
 */
 
 
@@ -309,57 +313,55 @@ static void usbd_hid_mouse_event_handler(app_usbd_class_inst_t const *p_inst, ap
  * USBD peripheral would be ready to accept commands, and library would be ready,
  * but it would not be connected to the bus.
  * Call app_usbd_enable to enable USBD communication with the host. */
-uint32_t logitacker_usb_init() {
-    uint32_t ret;
-    ret = app_usbd_init(&usbd_config);
-    VERIFY_SUCCESS(ret);
+uint32_t logitacker_usb_init()
+{
+	uint32_t ret = 0;
+	ret = app_usbd_init(&usbd_config);
+	VERIFY_SUCCESS(ret);
 
-    // Note: configured using sdk_config for cli_cdc_acm
-    //   #define NRF_CLI_CDC_ACM_COMM_INTERFACE 0
-    //   #define NRF_CLI_CDC_ACM_COMM_EPIN NRF_DRV_USBD_EPIN2
-    //   #define NRF_CLI_CDC_ACM_DATA_INTERFACE 1
-    //   #define NRF_CLI_CDC_ACM_DATA_EPIN NRF_DRV_USBD_EPIN1
-    //   #define NRF_CLI_CDC_ACM_DATA_EPOUT NRF_DRV_USBD_EPOUT1
-    app_usbd_class_inst_t const *class_cdc_acm = app_usbd_cdc_acm_class_inst_get(&nrf_cli_cdc_acm);
-    ret = app_usbd_class_append(class_cdc_acm);
-    VERIFY_SUCCESS(ret);
+	// Note: configured using sdk_config for cli_cdc_acm
+	//   #define NRF_CLI_CDC_ACM_COMM_INTERFACE 0
+	//   #define NRF_CLI_CDC_ACM_COMM_EPIN NRF_DRV_USBD_EPIN2
+	//   #define NRF_CLI_CDC_ACM_DATA_INTERFACE 1
+	//   #define NRF_CLI_CDC_ACM_DATA_EPIN NRF_DRV_USBD_EPIN1
+	//   #define NRF_CLI_CDC_ACM_DATA_EPOUT NRF_DRV_USBD_EPOUT1
+	app_usbd_class_inst_t const *class_cdc_acm = app_usbd_cdc_acm_class_inst_get(&nrf_cli_cdc_acm);
+	ret = app_usbd_class_append(class_cdc_acm);
+	VERIFY_SUCCESS(ret);
 
-    // Note: configured in logitacker_usb.h
-    //   #define LOGITACKER_USB_HID_GENERIC_INTERFACE  2                        // HID generic class interface number.
-    //   #define LOGITACKER_USB_HID_GENERIC_EPIN       NRF_DRV_USBD_EPIN3       // HID generic class endpoint number.
-    app_usbd_class_inst_t const *class_inst_hid_generic = app_usbd_hid_generic_class_inst_get(&m_app_hid_generic);
-    ret = app_usbd_class_append(class_inst_hid_generic);
-    VERIFY_SUCCESS(ret);
+	// Note: configured in logitacker_usb.h
+	//   #define LOGITACKER_USB_HID_GENERIC_INTERFACE  2                        // HID generic class interface number.
+	//   #define LOGITACKER_USB_HID_GENERIC_EPIN       NRF_DRV_USBD_EPIN3       // HID generic class endpoint number.
+	app_usbd_class_inst_t const *class_inst_hid_generic = app_usbd_hid_generic_class_inst_get(&m_app_hid_generic);
+	ret = app_usbd_class_append(class_inst_hid_generic);
+	VERIFY_SUCCESS(ret);
 
-    // Note: configured in logitacker_usb.h
-    //   #define LOGITACKER_USB_HID_KEYBOARD_INTERFACE  3
-    //   #define LOGITACKER_USB_HID_KEYBOARD_EPIN       NRF_DRV_USBD_EPIN4
-    //app_usbd_class_inst_t const * class_inst_hid_keyboard = app_usbd_hid_kbd_class_inst_get(&m_app_hid_keyboard);
-    app_usbd_class_inst_t const *class_inst_hid_keyboard = app_usbd_hid_generic_class_inst_get(&m_app_hid_keyboard);
-    ret = app_usbd_class_append(class_inst_hid_keyboard);
-    VERIFY_SUCCESS(ret);
+	// Note: configured in logitacker_usb.h
+	//   #define LOGITACKER_USB_HID_KEYBOARD_INTERFACE  3
+	//   #define LOGITACKER_USB_HID_KEYBOARD_EPIN       NRF_DRV_USBD_EPIN4
+	//app_usbd_class_inst_t const * class_inst_hid_keyboard = app_usbd_hid_kbd_class_inst_get(&m_app_hid_keyboard);
+	app_usbd_class_inst_t const *class_inst_hid_keyboard = app_usbd_hid_generic_class_inst_get(&m_app_hid_keyboard);
+	ret = app_usbd_class_append(class_inst_hid_keyboard);
+	VERIFY_SUCCESS(ret);
 
-    // Note: configured in logitacker_usb.h
-    //   #define LOGITACKER_USB_HID_MOUSE_INTERFACE  4
-    //   #define LOGITACKER_USB_HID_MOUSE_EPIN       NRF_DRV_USBD_EPIN5
-    //app_usbd_class_inst_t const * class_inst_hid_mouse = app_usbd_hid_mouse_class_inst_get(&m_app_hid_mouse);
-    app_usbd_class_inst_t const *class_inst_hid_mouse = app_usbd_hid_generic_class_inst_get(&m_app_hid_mouse);
-    ret = app_usbd_class_append(class_inst_hid_mouse);
-    VERIFY_SUCCESS(ret);
+	// Note: configured in logitacker_usb.h
+	//   #define LOGITACKER_USB_HID_MOUSE_INTERFACE  4
+	//   #define LOGITACKER_USB_HID_MOUSE_EPIN       NRF_DRV_USBD_EPIN5
+	//app_usbd_class_inst_t const * class_inst_hid_mouse = app_usbd_hid_mouse_class_inst_get(&m_app_hid_mouse);
+	app_usbd_class_inst_t const *class_inst_hid_mouse = app_usbd_hid_generic_class_inst_get(&m_app_hid_mouse);
+	ret = app_usbd_class_append(class_inst_hid_mouse);
+	VERIFY_SUCCESS(ret);
 
+	if (USBD_POWER_DETECTION) {
+		ret = app_usbd_power_events_enable();
+		APP_ERROR_CHECK(ret);
+	} else {
+		NRF_LOG_INFO("No USB power detection enabled\r\nStarting USB now");
 
-    if (USBD_POWER_DETECTION) {
-        ret = app_usbd_power_events_enable();
-        APP_ERROR_CHECK(ret);
-    } else {
-        NRF_LOG_INFO("No USB power detection enabled\r\nStarting USB now");
-
-        app_usbd_enable();
-        app_usbd_start();
-    }
-
-
-    return NRF_SUCCESS;
+		app_usbd_enable();
+		app_usbd_start();
+	}
+	return NRF_SUCCESS;
 }
 
 

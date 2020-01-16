@@ -19,118 +19,126 @@ typedef struct {
     nrf_esb_payload_t tmp_rx_payload;
 } logitacker_processor_discover_ctx_t;
 
-static logitacker_processor_t m_processor = {0};
-static logitacker_processor_discover_ctx_t m_static_discover_ctx; //we reuse the same context, alternatively an malloc'ed ctx would allow separate instances
+/* Variables */
+//we reuse the same context, alternatively an malloc'ed ctx would allow separate instances
+static logitacker_processor_discover_ctx_t		m_static_discover_ctx;
+static logitacker_processor_t					m_processor = {0};
 static char addr_str_buff[LOGITACKER_DEVICE_ADDR_STR_LEN] = {0};
 
+/* functions */
 void processor_discover_init_func(logitacker_processor_t *p_processor);
-void processor_discover_init_func_(logitacker_processor_discover_ctx_t *self);
-
 void processor_discover_deinit_func(logitacker_processor_t *p_processor);
-void processor_discover_deinit_func_(logitacker_processor_discover_ctx_t *self);
-
 void processor_discover_esb_handler_func(logitacker_processor_t *p_processor, nrf_esb_evt_t *p_esb_evt);
-void processor_discover_esb_handler_func_(logitacker_processor_discover_ctx_t *self, nrf_esb_evt_t *p_esb_event);
-
 void processor_discover_radio_handler_func(logitacker_processor_t *p_processor, radio_evt_t const *p_event);
-void processor_discover_radio_handler_func_(logitacker_processor_discover_ctx_t *self, radio_evt_t const *p_event);
-
 void processor_discover_bsp_handler_func(logitacker_processor_t *p_processor, bsp_event_t event);
+
+/* functions overloaded */
+void processor_discover_init_func_(logitacker_processor_discover_ctx_t *self);
+void processor_discover_deinit_func_(logitacker_processor_discover_ctx_t *self);
+void processor_discover_esb_handler_func_(logitacker_processor_discover_ctx_t *self, nrf_esb_evt_t *p_esb_event);
+void processor_discover_radio_handler_func_(logitacker_processor_discover_ctx_t *self, radio_evt_t const *p_event);
 void processor_discover_bsp_handler_func_(logitacker_processor_discover_ctx_t *self, bsp_event_t event);
 
-void discovery_process_rx(logitacker_processor_discover_ctx_t *self) {
-    nrf_esb_payload_t * p_rx_payload = &self->tmp_rx_payload;
 
-    while (nrf_esb_read_rx_payload(p_rx_payload) == NRF_SUCCESS) {
-        if (p_rx_payload->validated_promiscuous_frame) {
-            uint8_t len = p_rx_payload->length;
-            uint8_t ch_idx = p_rx_payload->rx_channel_index;
-            uint8_t ch = p_rx_payload->rx_channel;
-            uint8_t addr[5];
-            memcpy(addr, &p_rx_payload->data[2], 5);
+/* Process received data */
+void discovery_process_rx(logitacker_processor_discover_ctx_t *self)
+{
+	nrf_esb_payload_t *p_rx_payload = &self->tmp_rx_payload;
 
-            if (g_logitacker_global_config.discover_pass_through_hidraw) {
-                logitacker_usb_write_hidraw_input_report_rf_frame(LOGITACKER_MODE_DISCOVERY, addr, p_rx_payload);
-            }
+	while (nrf_esb_read_rx_payload(p_rx_payload) == NRF_SUCCESS)
+	{
+		if (p_rx_payload->validated_promiscuous_frame)
+		{
+			uint8_t len			= p_rx_payload->length;
+			uint8_t ch_idx		= p_rx_payload->rx_channel_index;
+			uint8_t ch			= p_rx_payload->rx_channel;
+			uint8_t addr[5];
+			memcpy(addr, &p_rx_payload->data[2], 5);
 
-            uint8_t prefix;
-            uint8_t base[4];
-            helper_addr_to_base_and_prefix(base, &prefix, addr, 5); //convert device addr to base+prefix and update device
+			if (g_logitacker_global_config.discover_pass_through_hidraw)
+			{
+				logitacker_usb_write_hidraw_input_report_rf_frame(LOGITACKER_MODE_DISCOVERY, addr, p_rx_payload);
+			}
 
-            helper_addr_to_hex_str(addr_str_buff, LOGITACKER_DEVICE_ADDR_LEN, addr);
-            NRF_LOG_INFO("DISCOVERY: received valid ESB frame (addr %s, len: %d, ch idx %d, raw ch %d, rssi %d)", addr_str_buff, len, ch_idx, ch, p_rx_payload->rssi);
+			uint8_t prefix;
+			uint8_t base[4];
+			//convert device addr to base+prefix and update device
+			helper_addr_to_base_and_prefix(base, &prefix, addr, 5);
 
-            NRF_LOG_HEXDUMP_DEBUG(p_rx_payload->data, p_rx_payload->length);
+			helper_addr_to_hex_str(addr_str_buff, LOGITACKER_DEVICE_ADDR_LEN, addr);
+			NRF_LOG_INFO("DISCOVERY: received valid ESB frame (addr %s, len: %d, ch idx %d, raw ch %d, rssi %d)", addr_str_buff, len, ch_idx, ch, p_rx_payload->rssi);
 
-            logitacker_devices_unifying_device_t *p_device = NULL;
+			NRF_LOG_HEXDUMP_DEBUG(p_rx_payload->data, p_rx_payload->length);
 
-            // check if deiscovered device already exists in RAM
-            if (logitacker_devices_get_device(&p_device, addr) != NRF_SUCCESS) {
-                // try to restore device from flash
-                if (logitacker_devices_restore_device_from_flash(&p_device, addr) != NRF_SUCCESS) {
-                    // restore from flash failed, create in ram
-                    logitacker_devices_create_device(&p_device, addr);
-                }
+			logitacker_devices_unifying_device_t *p_device = NULL;
 
-            }
+			// check if deiscovered device already exists in RAM
+			if (logitacker_devices_get_device(&p_device, addr) != NRF_SUCCESS) {
+				// try to restore device from flash
+				if (logitacker_devices_restore_device_from_flash(&p_device, addr) != NRF_SUCCESS) {
+					// restore from flash failed, create in ram
+					logitacker_devices_create_device(&p_device, addr);
+				}
 
-            // update device counters
-            //bool isLogitech = false;
-            if (p_device != NULL) {
-                // convert promisuous mode frame to default ESB frame
-                nrf_esb_payload_t promiscuous_rx_payload;
-                memcpy(&promiscuous_rx_payload, p_rx_payload, sizeof(nrf_esb_payload_t)); // create copy of promiscuous payload
-                logitacker_radio_convert_promiscuous_frame_to_default_frame(p_rx_payload, promiscuous_rx_payload); // convert to default payload (no RF address in payload data etc.)
+			}
 
-                // classify device (determin if it is Logitech)
-                logitacker_devices_device_update_classification(p_device, *p_rx_payload);
-                if (p_device->p_dongle != NULL) {
-                    if (p_device->p_dongle->classification == DONGLE_CLASSIFICATION_IS_LOGITECH_UNIFYING || p_device->p_dongle->classification == DONGLE_CLASSIFICATION_IS_LOGITECH_G700|| p_device->p_dongle->classification == DONGLE_CLASSIFICATION_IS_LOGITECH_LIGHTSPEED) {
-                        NRF_LOG_INFO("discovered device is Logitech")
-                        switch (g_logitacker_global_config.discovery_on_new_address) {
-                            case OPTION_DISCOVERY_ON_NEW_ADDRESS_CONTINUE:
-                                break;
-                            case OPTION_DISCOVERY_ON_NEW_ADDRESS_SWITCH_ACTIVE_ENUMERATION:
-                                if (!p_device->p_dongle->active_enumeration_finished) {
-                                    logitacker_enter_mode_active_enum(addr);
-                                } else {
-                                    NRF_LOG_INFO("active enumeration for device already performed, continue deiscovery")
-                                }
+			// update device counters
+			//bool isLogitech = false;
+			if (p_device != NULL) {
+				// convert promisuous mode frame to default ESB frame
+				nrf_esb_payload_t promiscuous_rx_payload;
+				memcpy(&promiscuous_rx_payload, p_rx_payload, sizeof(nrf_esb_payload_t)); // create copy of promiscuous payload
+				logitacker_radio_convert_promiscuous_frame_to_default_frame(p_rx_payload, promiscuous_rx_payload); // convert to default payload (no RF address in payload data etc.)
 
-                                break;
-                            case OPTION_DISCOVERY_ON_NEW_ADDRESS_SWITCH_PASSIVE_ENUMERATION:
-                                logitacker_enter_mode_passive_enum(addr);
-                                break;
-                            case OPTION_DISCOVERY_ON_NEW_ADDRESS_SWITCH_AUTO_INJECTION:
-                                if (p_device->executed_auto_inject_count < g_logitacker_global_config.max_auto_injects_per_device) {
-                                    p_device->executed_auto_inject_count++;
-                                    logitacker_enter_mode_injection(addr);
-                                    logitacker_injection_start_execution(true);
-                                } else {
-                                    NRF_LOG_INFO("maximum number of autoinjects reached for this device, continue discover mode")
-                                }
-                                //logitacker_script_engine_append_task_type_string(LOGITACKER_AUTO_INJECTION_PAYLOAD);
-                                break;
-                            default:
-                                // do nothing, stay in discovery
-                                break;
-                        }
-                    } else if (p_device->p_dongle->classification == DONGLE_CLASSIFICATION_IS_NOT_LOGITECH) {
-                        NRF_LOG_INFO("Discovered device doesn't seem to be Logitech, removing from list again...");
-                        NRF_LOG_HEXDUMP_INFO(p_rx_payload->data, p_rx_payload->length);
-                        if (p_device != NULL) logitacker_devices_del_device(p_device->rf_address);
-                    } else {
-                        NRF_LOG_INFO("discovered device not classified, yet. Likely because RX frame was empty ... removing device from list")
-                        if (p_device != NULL) logitacker_devices_del_device(p_device->rf_address);
-                    }
-                }
-            }
+				// classify device (determin if it is Logitech)
+				logitacker_devices_device_update_classification(p_device, *p_rx_payload);
+				if (p_device->p_dongle != NULL) {
+					if (p_device->p_dongle->classification == DONGLE_CLASSIFICATION_IS_LOGITECH_UNIFYING || p_device->p_dongle->classification == DONGLE_CLASSIFICATION_IS_LOGITECH_G700|| p_device->p_dongle->classification == DONGLE_CLASSIFICATION_IS_LOGITECH_LIGHTSPEED) {
+						NRF_LOG_INFO("discovered device is Logitech")
+							switch (g_logitacker_global_config.discovery_on_new_address) {
+								case OPTION_DISCOVERY_ON_NEW_ADDRESS_CONTINUE:
+									break;
+								case OPTION_DISCOVERY_ON_NEW_ADDRESS_SWITCH_ACTIVE_ENUMERATION:
+									if (!p_device->p_dongle->active_enumeration_finished) {
+										logitacker_enter_mode_active_enum(addr);
+									} else {
+										NRF_LOG_INFO("active enumeration for device already performed, continue deiscovery")
+									}
 
-        } else {
-            NRF_LOG_WARNING("invalid promiscuous frame in discover mode, shouldn't happen because of filtering");
-        }
+									break;
+								case OPTION_DISCOVERY_ON_NEW_ADDRESS_SWITCH_PASSIVE_ENUMERATION:
+									logitacker_enter_mode_passive_enum(addr);
+									break;
+								case OPTION_DISCOVERY_ON_NEW_ADDRESS_SWITCH_AUTO_INJECTION:
+									if (p_device->executed_auto_inject_count < g_logitacker_global_config.max_auto_injects_per_device) {
+										p_device->executed_auto_inject_count++;
+										logitacker_enter_mode_injection(addr);
+										logitacker_injection_start_execution(true);
+									} else {
+										NRF_LOG_INFO("maximum number of autoinjects reached for this device, continue discover mode")
+									}
+									//logitacker_script_engine_append_task_type_string(LOGITACKER_AUTO_INJECTION_PAYLOAD);
+									break;
+								default:
+									// do nothing, stay in discovery
+									break;
+							}
+					} else if (p_device->p_dongle->classification == DONGLE_CLASSIFICATION_IS_NOT_LOGITECH) {
+						NRF_LOG_INFO("Discovered device doesn't seem to be Logitech, removing from list again...");
+						NRF_LOG_HEXDUMP_INFO(p_rx_payload->data, p_rx_payload->length);
+						if (p_device != NULL) logitacker_devices_del_device(p_device->rf_address);
+					} else {
+						NRF_LOG_INFO("discovered device not classified, yet. Likely because RX frame was empty ... removing device from list")
+							if (p_device != NULL) logitacker_devices_del_device(p_device->rf_address);
+					}
+				}
+			}
 
-    }
+		} else {
+			NRF_LOG_WARNING("invalid promiscuous frame in discover mode, shouldn't happen because of filtering");
+		}
+
+	}
 
 }
 
