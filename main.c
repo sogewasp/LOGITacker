@@ -171,6 +171,10 @@ int main(void)
     }
 
     bsp_board_led_invert(LED_G);
+/*
+ * Initialize crypto backend
+ * https://infocenter.nordicsemi.com/topic/com.nordic.infocenter.sdk5.v15.3.0/group__nrf__crypto__initialization.html
+ * */
     ret = nrf_crypto_init();
     APP_ERROR_CHECK(ret);
 

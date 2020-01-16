@@ -117,6 +117,7 @@ static void usbd_device_event_handler(app_usbd_event_type_t event) {
         case APP_USBD_EVT_DRV_RESET:
             break;
         case APP_USBD_EVT_DRV_SUSPEND:
+/* Request library to suspend. */
             app_usbd_suspend_req(); // Allow the library to put the peripheral into sleep mode
             bsp_board_led_off(LED_R);
             break;
@@ -127,6 +128,9 @@ static void usbd_device_event_handler(app_usbd_event_type_t event) {
             bsp_board_led_on(LED_R);
             break;
         case APP_USBD_EVT_STOPPED:
+/* Disabled USDB peripheral cannot be accessed but also stops requesting
+ * High Frequency clock and releases power regulator. USB must be stopped first.
+ */
             app_usbd_disable();
             bsp_board_led_off(LED_R);
             break;
@@ -138,10 +142,22 @@ static void usbd_device_event_handler(app_usbd_event_type_t event) {
             break;
         case APP_USBD_EVT_POWER_REMOVED:
             NRF_LOG_INFO("USB power removed");
+/* Stop USB.
+ * When the event is processed interrupts and USB pull-ups are disabled.
+ * The peripheral itself is left enabled so it can be programmed,
+ * but a HOST sees it as a peripheral disconnection.
+ */
             app_usbd_stop();
             break;
         case APP_USBD_EVT_POWER_READY:
             NRF_LOG_INFO("USB ready");
+/* Request USBD to start.
+ * As queue is disabled by #define APP_USBD_CONFIG_EVENT_QUEUE_ENABLE 0
+ * it is processed immediately inside this function.
+ * It means that this function cannot be called from interrupt with priority higher than USB interrupt.
+ *
+ * 1) Start library. 2) Enable interrupts. 3) Enable USB pull-ups.
+ */
             app_usbd_start();
             break;
         default:
@@ -288,6 +304,11 @@ static void usbd_hid_mouse_event_handler(app_usbd_class_inst_t const *p_inst, ap
     }
 }
 
+/* USB library initialization.
+ * Call this function before any configuration or class attachment.
+ * USBD peripheral would be ready to accept commands, and library would be ready,
+ * but it would not be connected to the bus.
+ * Call app_usbd_enable to enable USBD communication with the host. */
 uint32_t logitacker_usb_init() {
     uint32_t ret;
     ret = app_usbd_init(&usbd_config);

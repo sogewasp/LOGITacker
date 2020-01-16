@@ -92,6 +92,7 @@ void main_event_handler_esb(nrf_esb_evt_t *p_event) {
                                       p_event); // call ESB handler function of p_processor and hand in p_processor (self) as first arg
 }
 
+/* Radio event handler */
 void main_event_handler_radio(radio_evt_t const *p_event) {
     //helper_log_priority("UNIFYING_event_handler");
     switch (p_event->evt_id) {
@@ -115,6 +116,7 @@ void main_event_handler_radio(radio_evt_t const *p_event) {
                                         p_event); // call ESB handler function of p_processor and hand in p_processor (self) as first arg
 }
 
+/* Board Support Package event handler */
 static void main_event_handler_bsp(bsp_event_t ev) {
     // runs in interrupt mode
     //helper_log_priority("bsp_event_callback");
